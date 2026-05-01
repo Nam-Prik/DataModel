@@ -4,8 +4,8 @@ from sklearn.linear_model import LogisticRegression
 
 MODELS = {
     'XGBoost': XGBClassifier(eval_metric='logloss', use_label_encoder=False),
-    'RandomForest': RandomForestClassifier(),
-    'LogisticRegression': LogisticRegression(max_iter=1000)
+    'RandomForest': RandomForestClassifier(class_weight='balanced'),
+    'LogisticRegression': LogisticRegression(max_iter=1000, class_weight='balanced')
 }
 
 PARAM_GRIDS = {
@@ -28,4 +28,12 @@ TRAIN_CONFIG = {
     'test_size': 0.2,
     'n_splits': 5,
     'random_state': 42
+}
+
+OPTUNA_CONFIG = {
+    'n_trials': 50,
+    'direction': 'maximize',
+    'n_splits': 5,
+    'random_state': 42,
+    'scoring': 'f1_weighted'
 }

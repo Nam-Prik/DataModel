@@ -3,6 +3,7 @@ scikit-learn
 pandas
 numpy
 jupyter
-joblib
+optuna
 matplotlib
 seaborn
+joblib

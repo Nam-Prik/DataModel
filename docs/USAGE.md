@@ -1,69 +1,111 @@
-# Multi-Model Tabular Data Pipeline Usage Guide
-
-Welcome to the data modeling pipeline! This pipeline is designed around the best practices of keeping code modular, configurations separate, and evaluating multiple machine learning algorithms simultaneously.
+# Tabular Classification Pipeline — Usage Guide
 
 ## Project Structure
 
-Here is what every file in the project does:
-
 ```
 .
-├── data/                               # Directory for saving raw or processed data
-│   └── sample_data.csv                 # (Generated) sample dataset for testing
+├── data/                              # Place your datasets here
 ├── docs/
-│   └── USAGE.md                        # This documentation file
+│   └── USAGE.md                       # This file
+├── models/                            # Auto-saved trained models (.joblib)
 ├── notebooks/
-│   └── training_pipeline.ipynb         # Interactive notebook showing how to use the pipeline
-├── requirements.txt                    # Project dependencies
+│   ├── training_pipeline.ipynb        # Run multi-model GridSearch comparison
+│   ├── evaluation.ipynb               # Visualize confusion matrix, ROC, feature importance
+│   └── optuna_tuning.ipynb            # Advanced Bayesian hyperparameter tuning
+├── requirements.txt
 └── src/
-    ├── __init__.py                     # Makes src a Python module
-    ├── config.py                       # Hyperparameter configurations and train settings
-    ├── data.py                         # Helper functions to load data and split it
-    ├── model.py                        # Core functions for training, tuning (GridSearchCV), and evaluation
-    └── pipeline.py                     # The high-level wrapper to run comparisons easily
+    ├── config.py                      # All model configs, param grids, Optuna config
+    ├── data.py                        # Load and split data
+    ├── evaluate.py                    # Evaluation plots (confusion matrix, ROC, importance)
+    ├── model.py                       # Generic train-tune-evaluate logic (GridSearchCV)
+    ├── pipeline.py                    # High-level multi-model comparison wrapper
+    ├── tuner.py                       # Optuna Bayesian tuning for XGBoost and RandomForest
+    └── utils.py                       # save_model / load_model (joblib)
 ```
 
-## How to use the Pipeline
+---
 
-The primary entry point of this codebase is the `run_multi_model_pipeline` wrapper located in `src/pipeline.py`.
-
-### 1. Basic Usage
-
-To easily train and compare multiple algorithms (e.g., XGBoost, Random Forest, Logistic Regression), use the following Python snippet in a script or notebook:
+## Quickstart — Compare All Models
 
 ```python
 import pandas as pd
 from src.pipeline import run_multi_model_pipeline
 
-# 1. Load your DataFrame
-# Ensure your DataFrame is pre-processed (e.g., categorical variables encoded)
-df = pd.read_csv('path_to_your_dataset.csv')
+df = pd.read_csv('data/your_data.csv')         # Clean data ready to train
+results = run_multi_model_pipeline(df, target_col='your_target')
 
-# 2. Run the multi-model pipeline wrapper
-# Provide your DataFrame and the name of your target (label) column
-results = run_multi_model_pipeline(df, target_col='your_target_column_name')
-
-# 3. View the Model Comparison DataFrame
-# This dataframe contains Accuracy, Precision, Recall, and F1 Score for all evaluated models
+# Ranked comparison table (Accuracy, Precision, Recall, F1)
 print(results['comparison_df'])
 
-# 4. Access the Best Model Details (determined by F1 Score)
-print(f"Best Model Name: {results['best_model_name']}")
-print(f"Best Model Parameters: {results['best_params']}")
-
-# You can now use the best model to predict new data
+# Best model (auto-saved to models/)
 best_model = results['best_model']
-# predictions = best_model.predict(new_data)
+print(results['best_model_name'], results['best_params'])
 ```
 
-### 2. Customizing Hyperparameters and Models
+---
 
-**Best Practice:** Do not modify the pipeline logic to change hyperparameter ranges.
+## Evaluate the Best Model
 
-If you want to modify what models are tested or their hyperparameter grids, open `src/config.py`.
+```python
+from src.utils import load_model
+from src.evaluate import full_evaluation_report
 
-- **`MODELS`**: Add or remove algorithms you want to test here.
-- **`PARAM_GRIDS`**: Update the list of hyperparameter values for GridSearchCV to explore.
-- **`TRAIN_CONFIG`**: Modify test size, random seeds, and K-Fold splits.
+model = load_model('XGBoost')   # Name matches what was saved
+full_evaluation_report(model, X_test, y_test, feature_names, 'XGBoost')
+# → Confusion Matrix + ROC Curve + Feature Importance plots
+```
 
-By keeping these settings in `src/config.py`, the main training code remains clean, making it easier to track configurations and share experiments.
+---
+
+## Advanced Tuning with Optuna
+
+```python
+from src.tuner import optuna_tune_xgboost, optuna_tune_rf
+
+xgb_model, xgb_params, study = optuna_tune_xgboost(X_train, y_train)
+rf_model, rf_params, study   = optuna_tune_rf(X_train, y_train)
+```
+
+Optuna uses Bayesian optimization — significantly fewer trials to find better results than GridSearch.
+
+---
+
+## Configuration — `src/config.py`
+
+This is the **single place** to control everything:
+
+| Setting | What it does |
+|---|---|
+| `MODELS` | Add / remove models to compare |
+| `PARAM_GRIDS` | Define GridSearch hyperparameter ranges per model |
+| `TRAIN_CONFIG` | `test_size`, `n_splits`, `random_state` |
+| `OPTUNA_CONFIG` | `n_trials`, `direction`, `scoring` for Optuna tuning |
+
+**Never** change the pipeline code to adjust hyperparameters. Always modify `config.py` only.
+
+---
+
+## Model Persistence
+
+- The **best model** from `run_multi_model_pipeline` is **automatically saved** to `models/<ModelName>.joblib`.
+- Optuna-tuned models can be manually saved: `save_model(model, 'XGBoost_optuna')`.
+- Load any saved model: `load_model('XGBoost')`.
+
+---
+
+## Recommended Workflow
+
+```
+1. Run training_pipeline.ipynb
+   → Compares all models, saves best one
+
+2. Run evaluation.ipynb
+   → Deep-dive with plots on the saved best model
+
+3. (Optional) Run optuna_tuning.ipynb
+   → Squeeze out better performance with Bayesian search
+
+4. Load the final model anywhere:
+   model = load_model('XGBoost_optuna')
+   predictions = model.predict(new_data)
+```
